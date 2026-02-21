@@ -5,3 +5,4 @@ ta
 smartapi-python
 pyotp
 requests
+logzero
