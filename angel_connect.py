@@ -51,18 +51,17 @@ class AngelLoader:
         
         for attempt in range(2):
             try:
-                # --- LOGIC FIX: Date Range ---
-                # Hum pichle 2 din ka data mangenge taaki Indicators (EMA/VWAP) calculate ho sakein.
-                # Sirf aaj ka data loge to subah 9:15 pe indicator banega hi nahi.
+                # --- FIX: EXACT LIVE TIME ---
                 to_date = datetime.now()
-                from_date = to_date - timedelta(days=3) # Safe side 3 days
+                from_date = to_date - timedelta(days=3)
                 
                 historicParam = {
                     "exchange": "NSE",
                     "symboltoken": token,
                     "interval": interval,
                     "fromdate": from_date.strftime('%Y-%m-%d 09:15'),
-                    "todate": to_date.strftime('%Y-%m-%d 15:30')
+                    # Dopehar 3:30 nahi, balki jo abhi time ho raha hai wahi bhejna hai
+                    "todate": to_date.strftime('%Y-%m-%d %H:%M') 
                 }
                 
                 data = self.api.getCandleData(historicParam)
@@ -76,13 +75,12 @@ class AngelLoader:
                     return df
                 
                 elif not data['status']:
-                    # Error code AB1004 matlab data nahi hai ya limit cross hui
-                    # print(f"⚠️ Retry {symbol}...") # Console ganda na karne ke liye comment kiya
                     time.sleep(delays[attempt])
                     continue 
                 
             except Exception as e:
-                print(f"Error {symbol}: {e}")
+                # Terminal mein error print hoga taaki pata chale issue kya hai
+                print(f"Error fetching {symbol}: {e}")
                 time.sleep(1)
         
         return pd.DataFrame()
