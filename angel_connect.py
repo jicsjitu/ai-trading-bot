@@ -51,27 +51,23 @@ class AngelLoader:
         
         for attempt in range(2):
             try:
-                ist_timezone = pytz.timezone('Asia/Kolkata')
-                now = datetime.now(ist_timezone)
-                
-                # --- ANGEL ONE SECRET FIX ---
-                # Pura current time mat maango. 5 minute peeche ka maango taaki candle 'Close' ho chuki ho.
-                safe_to_date = now - timedelta(minutes=5)
-                # 5 din peeche ka data maango taaki weekends (Sat/Sun) bhi cover ho jayein
-                from_date = safe_to_date - timedelta(days=5)
+                # --- LOGIC FIX: Date Range ---
+                # Hum pichle 2 din ka data mangenge taaki Indicators (EMA/VWAP) calculate ho sakein.
+                # Sirf aaj ka data loge to subah 9:15 pe indicator banega hi nahi.
+                to_date = datetime.now()
+                from_date = to_date - timedelta(days=3) # Safe side 3 days
                 
                 historicParam = {
                     "exchange": "NSE",
-                    "symboltoken": str(token), # Ise hamesha text (string) format mein bhejna hota hai
+                    "symboltoken": token,
                     "interval": interval,
                     "fromdate": from_date.strftime('%Y-%m-%d 09:15'),
-                    "todate": safe_to_date.strftime('%Y-%m-%d %H:%M') 
+                    "todate": to_date.strftime('%Y-%m-%d 15:30')
                 }
                 
                 data = self.api.getCandleData(historicParam)
                 
-                # Agar status True hai aur data list empty nahi hai
-                if data and data.get('status') and data.get('data'):
+                if data['status'] and data['data']:
                     df = pd.DataFrame(data['data'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                     df['close'] = df['close'].astype(float)
                     df['volume'] = df['volume'].astype(int)
@@ -79,14 +75,14 @@ class AngelLoader:
                     df['low'] = df['low'].astype(float)
                     return df
                 
-                elif data and not data.get('status'):
-                    # Ab terminal mein actual error message aayega!
-                    print(f"⚠️ API Rejected {symbol}: {data.get('message')}")
+                elif not data['status']:
+                    # Error code AB1004 matlab data nahi hai ya limit cross hui
+                    # print(f"⚠️ Retry {symbol}...") # Console ganda na karne ke liye comment kiya
                     time.sleep(delays[attempt])
                     continue 
                 
             except Exception as e:
-                print(f"Error fetching {symbol}: {e}")
-                time.sleep(2)
+                print(f"Error {symbol}: {e}")
+                time.sleep(1)
         
         return pd.DataFrame()
