@@ -69,17 +69,14 @@ if start_scan:
                 if trade_setup:
                     results.append(trade_setup)
                     st.toast(f"🚨 Found: {name} ({trade_setup['Signal']})")
-            else:
-                # Agar Angel One ne khali data bheja, toh hume pata chalna chahiye
-                st.toast(f"⚠️ {name} ka data empty aaya API se!")
-                
-        except Exception as e:
-            # Ab error screen par dikhega, chhpega nahi!
-            st.error(f"Failed {name}: {e}")
         
-        # Update Progress & Sleep (Throttling - Server ko saans lene do)
+        except Exception as e:
+            # Failures ko ignore karo taaki scan na ruke
+            pass
+        
+        # Update Progress & Sleep (Throttling)
         progress_bar.progress((i + 1) / total_stocks)
-        time.sleep(scan_delay)
+        time.sleep(scan_delay) 
 
     status_text.text("Scan Complete!")
     progress_bar.progress(100)
