@@ -23,7 +23,7 @@ def get_nifty_200_tokens():
         df_nse = df[
             (df['exch_seg'] == 'NSE') & 
             (df['symbol'].str.endswith('-EQ')) & 
-            (df['name'].str.isalpha()) # Junk symbols hatane ke liye
+            (df['name'].str.copy()) # Junk symbols hatane ke liye
         ]
         
         # Filter Logic: Hum sirf Top stocks chahte hain taaki scan fast ho.
