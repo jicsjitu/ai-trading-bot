@@ -34,15 +34,18 @@ class AngelLoader:
         try:
             totp = pyotp.TOTP(self.totp_key).now()
             data = self.api.generateSession(self.client_id, self.pwd, totp)
-            if data['status']:
+            
+            # Agar data valid hai aur status True hai
+            if data and data.get('status'):
                 print("Login Successful")
                 return data
             else:
-                print("Login Failed:", data)
-                return None
+                # Silently fail hone ke bajaye Exception raise karo
+                raise Exception(f"Invalid Credentials or TOTP. API Response: {data}")
+                
         except Exception as e:
-            print(f"Connection Error: {e}")
-            return None
+            # Yeh error seedha dashboard.py ke try-except block mein jayega
+            raise Exception(f"Login Error: {str(e)}")
 
     # ... (Neeche ka fetch_candle_data wala function bilkul same rahega, usko mat chhedna) ...
 
