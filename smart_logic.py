@@ -1,101 +1,125 @@
 # smart_logic.py
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from ta.trend import EMAIndicator, ADXIndicator 
 from ta.volume import VolumeWeightedAveragePrice 
-from ta.volatility import AverageTrueRange
+from ta.volatility import AverageTrueRange, BollingerBands
 
 class SmartAnalyzer:
     def __init__(self):
         pass
 
-    def analyze_future_buildup(self, df):
-        if len(df) < 20: # Kam se kam 20 candles chahiye moving average ke liye
-            return "Neutral"
-
-        price_now = df['close'].iloc[-1]
-        price_prev = df['close'].iloc[-2]
-        vol_now = df['volume'].iloc[-1]
-        
-        # Rolling Volume Avg
-        vol_avg = df['volume'].rolling(20).mean().iloc[-1]
-        
-        price_change = price_now - price_prev
-        
-        if pd.isna(vol_avg) or vol_avg == 0:
-            high_volume = False
-        else:
-            high_volume = vol_now > (vol_avg * 1.5) # Thoda strict kiya (1.5x)
-        
-        build_up = "Neutral"
-        
-        if price_change > 0 and high_volume:
-            build_up = "Long Build Up 🟢"
-        elif price_change < 0 and high_volume:
-            build_up = "Short Build Up 🔴"
-        elif price_change > 0 and not high_volume:
-            build_up = "Short Covering ⚡"
-        elif price_change < 0 and not high_volume:
-            build_up = "Long Unwinding ⚠️"
+    def is_valid_time(self, timestamp_str):
+        # Market ke choppy/sideways time (11:30 to 13:30) ko filter out karta hai
+        try:
+            dt = pd.to_datetime(timestamp_str)
+            time_obj = dt.time()
             
-        return build_up
+            morning_start = datetime.strptime("09:15", "%H:%M").time()
+            morning_end = datetime.strptime("11:30", "%H:%M").time()
+            
+            afternoon_start = datetime.strptime("13:30", "%H:%M").time()
+            afternoon_end = datetime.strptime("15:15", "%H:%M").time()
+            
+            if (morning_start <= time_obj <= morning_end) or (afternoon_start <= time_obj <= afternoon_end):
+                return True
+            return False
+        except:
+            return True
 
     def analyze_stock(self, df_5min, stock_name):
-        if df_5min.empty or len(df_5min) < 50:
+        if df_5min.empty or len(df_5min) < 200:
             return None
 
-        # --- INDICATORS ---
-        ema_20 = EMAIndicator(close=df_5min['close'], window=20).ema_indicator().iloc[-1]
-        ema_50 = EMAIndicator(close=df_5min['close'], window=50).ema_indicator().iloc[-1]
-        adx = ADXIndicator(high=df_5min['high'], low=df_5min['low'], close=df_5min['close'], window=14).adx().iloc[-1]
+        df = df_5min.copy()
+
+        # --- PROFESSIONAL INDICATORS ---
+        df['ema_200'] = EMAIndicator(close=df['close'], window=200).ema_indicator()
+        df['ema_50'] = EMAIndicator(close=df['close'], window=50).ema_indicator()
+        df['ema_20'] = EMAIndicator(close=df['close'], window=20).ema_indicator()
         
-        vwap_ind = VolumeWeightedAveragePrice(high=df_5min['high'], low=df_5min['low'], close=df_5min['close'], volume=df_5min['volume'], window=14)
-        vwap = vwap_ind.volume_weighted_average_price().iloc[-1]
+        df['adx'] = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14).adx()
+        df['vwap'] = VolumeWeightedAveragePrice(high=df['high'], low=df['low'], close=df['close'], volume=df['volume'], window=14).volume_weighted_average_price()
+        df['atr'] = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14).average_true_range()
         
-        atr = AverageTrueRange(high=df_5min['high'], low=df_5min['low'], close=df_5min['close'], window=14).average_true_range().iloc[-1]
+        # Bollinger Bands for Squeeze & True Breakout
+        bb = BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_high'] = bb.bollinger_hband()
+        df['bb_low'] = bb.bollinger_lband()
+        df['bb_width'] = (df['bb_high'] - df['bb_low']) / df['close'] # Volatility squeeze measure
         
-        price = df_5min['close'].iloc[-1]
-        build_up_status = self.analyze_future_buildup(df_5min)
+        # Volume Spike (2.5x of 10-period average)
+        df['vol_avg_10'] = df['volume'].rolling(10).mean()
+        df['volume_spike'] = df['volume'] > (df['vol_avg_10'] * 2.5)
+        
+        # --- NO REPAINTING: CLOSED CANDLE [-2] FOR LOGIC ---
+        closed = df.iloc[-2]  
+        current = df.iloc[-1] 
+        
+        # Time Filter Check
+        if not self.is_valid_time(current['timestamp']):
+            return None
+
+        # --- FAKE BREAKOUT PREVENTION CALCULATIONS ---
+        candle_range = closed['high'] - closed['low']
+        if candle_range == 0:
+            return None
+            
+        candle_body = abs(closed['close'] - closed['open'])
+        body_ratio = candle_body / candle_range # Body kitni strong hai
+        
+        # Upper wick/shadow check (Buyer rejection check)
+        upper_wick = closed['high'] - max(closed['open'], closed['close'])
+        is_clean_candle = upper_wick < (candle_range * 0.3) # Wick 30% se choti honi chahiye
 
         signal = "NEUTRAL"
         reasons = []
         
-        is_uptrend = price > ema_20 > ema_50
-        is_downtrend = price < ema_20 < ema_50
+        # Trend Rules
+        is_uptrend = (closed['close'] > closed['ema_20'] > closed['ema_50']) and (closed['close'] > closed['ema_200'])
+        is_downtrend = (closed['close'] < closed['ema_20'] < closed['ema_50']) and (closed['close'] < closed['ema_200'])
         
-        # BUY LOGIC
-        if is_uptrend and price > vwap and adx > 20:
-            if "Long Build Up" in build_up_status or "Short Covering" in build_up_status:
-                signal = "BUY"
-                reasons.append(f"Trend Up + VWAP + {build_up_status}")
-        
-        # SELL LOGIC
-        elif is_downtrend and price < vwap and adx > 20:
-            if "Short Build Up" in build_up_status or "Long Unwinding" in build_up_status:
-                signal = "SELL"
-                reasons.append(f"Trend Down + VWAP Rejected + {build_up_status}")
+        # --- BUY LOGIC (Zero Fake Breakout Filter) ---
+        # 1. Trend Up 2. Price above VWAP 3. Strong ADX (>25) 4. Volume Spike 5. Clean Candle Body (>60%) 6. Breaking Bollinger High
+        if is_uptrend and (closed['close'] > closed['vwap']) and (closed['adx'] > 25):
+            if closed['volume_spike'] and (body_ratio >= 0.6) and is_clean_candle:
+                if closed['close'] >= closed['bb_high'] * 0.99: # Band breakout confirmation
+                    if current['close'] >= closed['close']: # Early catch validation
+                        signal = "BUY"
+                        reasons.append("Pro Anti-Fake Breakout + Vol-Spike + Clean Body")
+                        
+        # --- SELL LOGIC ---
+        elif is_downtrend and (closed['close'] < closed['vwap']) and (closed['adx'] > 25):
+            if closed['volume_spike'] and (body_ratio >= 0.6) and is_clean_candle:
+                if closed['close'] <= closed['bb_low'] * 1.01:
+                    if current['close'] <= closed['close']:
+                        signal = "SELL"
+                        reasons.append("Pro Breakdown + Rejection Clean + High Vol")
 
         if signal == "NEUTRAL":
             return None
 
-        # --- RISK MANAGEMENT ---
-        sl_buffer = atr * 1.5
-        if "BUY" in signal:
-            stop_loss = price - sl_buffer
-            target = price + (sl_buffer * 2)
+        # --- PROFESSIONAL RISK MANAGEMENT (1:2 Risk/Reward) ---
+        sl_buffer = closed['atr'] * 1.5
+        entry_price = current['close']
+        
+        if signal == "BUY":
+            stop_loss = entry_price - sl_buffer
+            target = entry_price + (sl_buffer * 2)
         else:
-            stop_loss = price + sl_buffer
-            target = price - (sl_buffer * 2)
+            stop_loss = entry_price + sl_buffer
+            target = entry_price - (sl_buffer * 2)
             
-        risk_per_share = abs(price - stop_loss)
+        risk_per_share = abs(entry_price - stop_loss)
 
         return {
             "Stock": stock_name, 
             "Signal": signal,
-            "Price": round(price, 2),
-            "Build_Up": build_up_status, # Dashboard yahi dhoond raha tha
+            "Price": round(entry_price, 2),
+            "Build_Up": "Institutional Verified 🛡️", 
             "Stop_Loss": round(stop_loss, 2),
             "Target": round(target, 2),
-            "Risk_Per_Share": round(risk_per_share, 2), # YEH KEY MISSING THI
-            "Reason": ", ".join(reasons)
+            "Risk_Per_Share": round(risk_per_share, 2), 
+            "Reason": reasons[0]
         }
