@@ -38,17 +38,17 @@ except Exception as e:
 analyzer = SmartAnalyzer()
 token_map = load_tokens()
 
-# --- TOP CONTROL BAR (Name & Controls) ---
-col_head1, col_head2, col_head3 = st.columns([3, 2, 2])
+# --- TOP CONTROL BAR (Scan Button on Left, Name on Right) ---
+col_head1, col_head2, col_head3 = st.columns([2, 2, 3])
+
 with col_head1:
-    st.markdown("### ⚡ Jitu Kumar Gupta")
-    st.caption(f"Tracking: **{len(token_map)}** Liquid Stocks | API: **Connected ✅**")
+    start_scan = st.button('🔍 Scan Market Now', type="primary", use_container_width=True)
 
 with col_head2:
     max_threads = st.slider("Scan Speed", 5, 20, 10, label_visibility="collapsed")
 
 with col_head3:
-    start_scan = st.button('🔍 Scan Market Now', type="primary", use_container_width=True)
+    st.markdown("### ⚡ Jitu Kumar Gupta")
 
 st.markdown("---")
 
@@ -175,5 +175,3 @@ if start_scan:
                         st.info(f"💡 **Logic:** {trade['Reason']}")
         else:
             st.warning("No setups match the selected filter.")
-    else:
-        st.warning("No high-probability setups found right now.")
