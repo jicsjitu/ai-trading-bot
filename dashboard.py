@@ -7,19 +7,16 @@ from smart_logic import SmartAnalyzer
 from token_manager import get_high_volume_stocks
 
 # --- PAGE CONFIG & PRO CSS STYLING ---
-st.set_page_config(page_title="Jitu Kumar Gupta - Terminal", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Jics Pro Terminal", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
         .main { background-color: #0e1117; }
-        .stButton>button { width: 100%; border-radius: 6px; font-weight: bold; height: 3em; }
+        .stButton>button { border-radius: 6px; font-weight: bold; height: 3em; }
         .signal-buy { color: #3fb950; font-weight: bold; font-size: 1.2rem; }
         .signal-sell { color: #f85149; font-weight: bold; font-size: 1.2rem; }
     </style>
 """, unsafe_allow_html=True)
-
-st.title("⚡ Jics Pro Terminal")
-st.markdown("### Institutional-Grade Multi-Threaded Market Scanner")
 
 # --- CACHING LOGIC ---
 @st.cache_resource
@@ -33,22 +30,26 @@ def load_tokens():
 # Initialize Logic
 try:
     loader = get_angel_loader()
-    st.sidebar.success("API Connected ✅")
 except Exception as e:
-    st.sidebar.error(f"Login Failed: {e}")
+    st.error(f"Login Failed: {e}")
     st.stop()
 
 analyzer = SmartAnalyzer()
 token_map = load_tokens()
 
-# --- SIDEBAR CONTROLS ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("⚙️ Terminal Settings")
-st.sidebar.info(f"Tracking: **{len(token_map)}** Liquid Stocks")
-max_threads = st.sidebar.slider("Scan Speed (Workers)", 5, 20, 10)
+# --- TOP HEADER BAR WITH CONTROLS ---
+col_head1, col_head2, col_head3 = st.columns([3, 2, 2])
+with col_head1:
+    st.markdown("### ⚡ Jics Pro Terminal")
+    st.caption(f"Tracking: **{len(token_map)}** Liquid Stocks")
 
-st.sidebar.markdown("---")
-start_scan = st.sidebar.button('🔍 Scan Market Now', type="primary")
+with col_head2:
+    max_threads = st.slider("Scan Speed (Workers)", 5, 20, 10, label_visibility="collapsed")
+
+with col_head3:
+    start_scan = st.button('🔍 Scan Market Now', type="primary", use_container_width=True)
+
+st.markdown("---")
 
 # --- MAIN INTERFACE ---
 tab1, tab2 = st.tabs(["🚨 Live Trade Signals", "📊 Market Health & Info"])
@@ -97,6 +98,13 @@ with tab1:
             
             res_df = pd.DataFrame(results)
 
+            # --- REORDER COLUMNS AS REQUESTED ---
+            # Desired order: Stock, Signal, Price, Target, Stop_Loss, Risk_Per_Share, Build_Up, Reason
+            cols_order = ['Stock', 'Signal', 'Price', 'Target', 'Stop_Loss', 'Risk_Per_Share', 'Build_Up', 'Reason']
+            # Ensure all columns exist before reordering
+            cols_order = [c for c in cols_order if c in res_df.columns]
+            res_df = res_df[cols_order]
+
             # --- TOP SUMMARY METRICS ---
             total_sigs = len(res_df)
             buy_cnt = len(res_df[res_df['Signal'] == 'BUY'])
@@ -108,16 +116,28 @@ with tab1:
             m3.metric("SELL Setups 🔴", sell_cnt)
             st.markdown("---")
 
-            # --- CLEAN SUMMARY TABLE VIEW ---
+            # --- COLOR HIGHLIGHTING FOR TABLE ---
+            def highlight_flows(val):
+                if val in ['BUY', 'Long Build Up 🟢', 'Short Covering ⚡']:
+                    return 'color: #3fb950; font-weight: bold; background-color: rgba(63, 185, 80, 0.15);'
+                elif val in ['SELL', 'Short Build Up 🔴', 'Long Unwinding ⚠️']:
+                    return 'color: #f85149; font-weight: bold; background-color: rgba(248, 81, 73, 0.15);'
+                return ''
+
+            # --- CLEAN SUMMARY TABLE VIEW WITH PROPER COLUMN CONFIG ---
             st.dataframe(
-                res_df,
+                res_df.style.map(highlight_flows, subset=['Signal', 'Build_Up']),
                 hide_index=True,
                 use_container_width=True,
                 column_config={
+                    "Stock": "Stock Name",
+                    "Signal": "Signal Type",
                     "Price": st.column_config.NumberColumn("Price (₹)", format="₹%.2f"),
-                    "Stop_Loss": st.column_config.NumberColumn("Stop Loss (₹)", format="₹%.2f"),
                     "Target": st.column_config.NumberColumn("Target (₹)", format="₹%.2f"),
+                    "Stop_Loss": st.column_config.NumberColumn("Stop Loss (₹)", format="₹%.2f"),
                     "Risk_Per_Share": st.column_config.NumberColumn("Risk/Share (₹)", format="₹%.2f"),
+                    "Build_Up": "Flow Status",
+                    "Reason": "Trigger Reason"
                 }
             )
             
@@ -133,12 +153,12 @@ with tab1:
                         st.markdown(f"<span class='{sig_class}'>{trade['Signal']}</span> @ **₹{trade['Price']:.2f}**", unsafe_allow_html=True)
                         st.metric("Target", f"₹{trade['Target']:.2f}", delta=f"Risk: ₹{trade['Risk_Per_Share']:.2f}", delta_color="inverse")
                         st.markdown(f"🛑 **Stop Loss:** ₹{trade['Stop_Loss']:.2f}")
-                        st.info(f"💡 **Logic:** {trade['Reason']}")
                         st.caption(f"⚡ **Status:** {trade['Build_Up']}")
+                        st.info(f"💡 **Logic:** {trade['Reason']}")
         else:
             st.warning("No high-probability setups found right now. Market might be consolidating or sideways.")
     else:
-        st.info("👈 Click **'Scan Market Now'** on the sidebar to trigger the live price action scanner.")
+        st.info("👆 Click **'Scan Market Now'** at the top right corner to trigger the live price action scanner.")
 
 with tab2:
     st.subheader("📌 System & Risk Management Rules")
