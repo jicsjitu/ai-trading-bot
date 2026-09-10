@@ -29,11 +29,11 @@ class SmartAnalyzer:
         bb = BollingerBands(close=df['close'], window=20, window_dev=2)
         df['bb_high'] = bb.bollinger_hband()
         df['bb_low'] = bb.bollinger_lband()
-        df['bb_width'] = (df['bb_high'] - df['bb_low']) / df['close'] # Volatility squeeze measure
+        df['bb_width'] = (df['bb_high'] - df['bb_low']) / df['close'] 
         
-        # Volume Spike (2.5x of 10-period average)
+        # Volume Spike (Optimized to 2.0x of 10-period average for earlier catch)
         df['vol_avg_10'] = df['volume'].rolling(10).mean()
-        df['volume_spike'] = df['volume'] > (df['vol_avg_10'] * 2.5)
+        df['volume_spike'] = df['volume'] > (df['vol_avg_10'] * 2.0)
         
         # --- NO REPAINTING: CLOSED CANDLE [-2] FOR LOGIC ---
         closed = df.iloc[-2]  
@@ -45,35 +45,35 @@ class SmartAnalyzer:
             return None
             
         candle_body = abs(closed['close'] - closed['open'])
-        body_ratio = candle_body / candle_range # Body kitni strong hai
+        body_ratio = candle_body / candle_range # Body strength check
         
-        # Upper wick/shadow check (Buyer rejection check)
+        # Upper wick/shadow check (Relaxed slightly for better responsiveness)
         upper_wick = closed['high'] - max(closed['open'], closed['close'])
-        is_clean_candle = upper_wick < (candle_range * 0.3) # Wick 30% se choti honi chahiye
+        is_clean_candle = upper_wick < (candle_range * 0.4) # Wick 40% se choti
 
         signal = "NEUTRAL"
         reasons = []
         
-        # Trend Rules
-        is_uptrend = (closed['close'] > closed['ema_20'] > closed['ema_50']) and (closed['close'] > closed['ema_200'])
-        is_downtrend = (closed['close'] < closed['ema_20'] < closed['ema_50']) and (closed['close'] < closed['ema_200'])
+        # Trend Rules (Flexible alignment)
+        is_uptrend = (closed['close'] > closed['ema_20']) and (closed['close'] > closed['ema_50']) and (closed['close'] > closed['ema_200'])
+        is_downtrend = (closed['close'] < closed['ema_20']) and (closed['close'] < closed['ema_50']) and (closed['close'] < closed['ema_200'])
         
-        # --- BUY LOGIC (Zero Fake Breakout Filter) ---
-        # 1. Trend Up 2. Price above VWAP 3. Strong ADX (>25) 4. Volume Spike 5. Clean Candle Body (>60%) 6. Breaking Bollinger High
-        if is_uptrend and (closed['close'] > closed['vwap']) and (closed['adx'] > 25):
-            if closed['volume_spike'] and (body_ratio >= 0.6) and is_clean_candle:
-                if closed['close'] >= closed['bb_high'] * 0.99: # Band breakout confirmation
-                    if current['close'] >= closed['close']: # Early catch validation
+        # --- BUY LOGIC (Optimized Balanced Filter) ---
+        # 1. Trend Up 2. Price above VWAP 3. ADX > 20 4. Volume Spike 2.0x 5. Body Ratio >= 0.5
+        if is_uptrend and (closed['close'] > closed['vwap']) and (closed['adx'] > 20):
+            if closed['volume_spike'] and (body_ratio >= 0.5) and is_clean_candle:
+                if closed['close'] >= closed['bb_high'] * 0.98: # Band breakout confirmation
+                    if current['close'] >= closed['close']: 
                         signal = "BUY"
-                        reasons.append("Pro Anti-Fake Breakout + Vol-Spike + Clean Body")
+                        reasons.append("Balanced Pro Momentum + Vol-Spike + Clean Body")
                         
         # --- SELL LOGIC ---
-        elif is_downtrend and (closed['close'] < closed['vwap']) and (closed['adx'] > 25):
-            if closed['volume_spike'] and (body_ratio >= 0.6) and is_clean_candle:
-                if closed['close'] <= closed['bb_low'] * 1.01:
+        elif is_downtrend and (closed['close'] < closed['vwap']) and (closed['adx'] > 20):
+            if closed['volume_spike'] and (body_ratio >= 0.5) and is_clean_candle:
+                if closed['close'] <= closed['bb_low'] * 1.02:
                     if current['close'] <= closed['close']:
                         signal = "SELL"
-                        reasons.append("Pro Breakdown + Rejection Clean + High Vol")
+                        reasons.append("Balanced Pro Breakdown + High Vol")
 
         if signal == "NEUTRAL":
             return None
