@@ -10,24 +10,6 @@ class SmartAnalyzer:
     def __init__(self):
         pass
 
-    def is_valid_time(self, timestamp_str):
-        # Market ke choppy/sideways time (11:30 to 13:30) ko filter out karta hai
-        try:
-            dt = pd.to_datetime(timestamp_str)
-            time_obj = dt.time()
-            
-            morning_start = datetime.strptime("09:15", "%H:%M").time()
-            morning_end = datetime.strptime("11:30", "%H:%M").time()
-            
-            afternoon_start = datetime.strptime("13:30", "%H:%M").time()
-            afternoon_end = datetime.strptime("15:15", "%H:%M").time()
-            
-            if (morning_start <= time_obj <= morning_end) or (afternoon_start <= time_obj <= afternoon_end):
-                return True
-            return False
-        except:
-            return True
-
     def analyze_stock(self, df_5min, stock_name):
         if df_5min.empty or len(df_5min) < 200:
             return None
@@ -56,10 +38,6 @@ class SmartAnalyzer:
         # --- NO REPAINTING: CLOSED CANDLE [-2] FOR LOGIC ---
         closed = df.iloc[-2]  
         current = df.iloc[-1] 
-        
-        # Time Filter Check
-        if not self.is_valid_time(current['timestamp']):
-            return None
 
         # --- FAKE BREAKOUT PREVENTION CALCULATIONS ---
         candle_range = closed['high'] - closed['low']
