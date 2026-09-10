@@ -1,16 +1,27 @@
-# dashboard.py (Corrected & Integrated)
+# dashboard.py (Pro Trading Terminal Edition)
 import streamlit as st
 import time
 import pandas as pd
+import concurrent.futures
 from angel_connect import AngelLoader
 from smart_logic import SmartAnalyzer
-from token_manager import get_high_volume_stocks # YEH IMPORT ZAROORI HAI
+from token_manager import get_high_volume_stocks
 
-# Page Config
-st.set_page_config(page_title="Pro AI Trader Agent", layout="wide")
+# --- PAGE CONFIG & PRO CSS STYLING ---
+st.set_page_config(page_title="Jitu Kumar Gupta", layout="wide", page_icon="⚡")
 
-st.title("🚀 AI Trading Agent (Smart Money Logic)")
-st.markdown("### Analyzing Indian Market - Sector & Price Action")
+st.markdown("""
+    <style>
+        .main { background-color: #0e1117; }
+        .stButton>button { width: 100%; border-radius: 6px; font-weight: bold; height: 3em; }
+        .metric-card { background-color: #161b22; border: 1px solid #30363d; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+        .signal-buy { color: #3fb950; font-weight: bold; font-size: 1.2rem; }
+        .signal-sell { color: #f85149; font-weight: bold; font-size: 1.2rem; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("⚡ Jics")
+st.markdown("### Institutional-Grade Multi-Threaded Market Scanner")
 
 # --- CACHING LOGIC ---
 @st.cache_resource
@@ -19,7 +30,6 @@ def get_angel_loader():
 
 @st.cache_data
 def load_tokens():
-    # Ab hum hardcoded dictionary nahi, balki dynamic list use karenge
     return get_high_volume_stocks()
 
 # Initialize Logic
@@ -27,95 +37,104 @@ try:
     loader = get_angel_loader()
     st.sidebar.success("API Connected ✅")
 except Exception as e:
-    st.error(f"Login Failed: {e}")
+    st.sidebar.error(f"Login Failed: {e}")
     st.stop()
 
 analyzer = SmartAnalyzer()
-
-# --- SIDEBAR & SCAN BUTTON ---
 token_map = load_tokens()
-st.sidebar.info(f"Tracking {len(token_map)} Liquid Stocks")
 
-# Scan Speed Control
-scan_delay = st.sidebar.slider("Scan Speed (Seconds)", 0.5, 2.0, 1.0)
+# --- SIDEBAR CONTROLS ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚙️ Terminal Settings")
+st.sidebar.info(f"Tracking: **{len(token_map)}** Liquid Stocks")
+max_threads = st.sidebar.slider("Scan Speed (Workers)", 5, 20, 10)
 
-col1, col2 = st.columns([1, 4])
-with col1:
-    start_scan = st.button('🔍 Scan Market Now', type="primary")
+st.sidebar.markdown("---")
+start_scan = st.sidebar.button('🔍 Scan Market Now', type="primary")
 
-if start_scan:
-    results = []
-    
-    # Progress Bar
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    stock_list = list(token_map.items())
-    total_stocks = len(stock_list)
-    
-    st.markdown("---")
-    st.write("### 📊 Live Analysis Results")
+# --- MAIN INTERFACE ---
+tab1, tab2 = st.tabs(["🚨 Live Trade Signals", "📊 Market Health & Info"])
 
-    for i, (name, token) in enumerate(stock_list):
-        status_text.text(f"Scanning ({i+1}/{total_stocks}): {name}...")
+with tab1:
+    if start_scan:
+        results = []
+        stock_list = list(token_map.items())
+        total_stocks = len(stock_list)
         
-        try:
-            # 1. Fetch Data
-            df = loader.fetch_candle_data(token, name, interval="FIVE_MINUTE")
+        st.write("### 🔄 Scanning Live Order Book & Price Action...")
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        def scan_single_stock(item):
+            name, token = item
+            try:
+                df = loader.fetch_candle_data(token, name, interval="FIVE_MINUTE")
+                if not df.empty:
+                    trade_setup = analyzer.analyze_stock(df, name)
+                    if trade_setup:
+                        return trade_setup
+            except Exception:
+                pass
+            return None
+
+        completed_count = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+            future_to_stock = {executor.submit(scan_single_stock, stock): stock for stock in stock_list}
             
-            # 2. Analyze
-            if not df.empty:
-                trade_setup = analyzer.analyze_stock(df, name)
-                if trade_setup:
-                    results.append(trade_setup)
-                    st.toast(f"🚨 Found: {name} ({trade_setup['Signal']})")
-        
-        except Exception as e:
-            # Failures ko ignore karo taaki scan na ruke
-            pass
-        
-        # Update Progress & Sleep (Throttling)
-        progress_bar.progress((i + 1) / total_stocks)
-        time.sleep(scan_delay) 
+            for future in concurrent.futures.as_completed(future_to_stock):
+                completed_count += 1
+                progress_bar.progress(completed_count / total_stocks)
+                status_text.text(f"Progress: {completed_count}/{total_stocks} stocks analyzed...")
+                
+                res = future.result()
+                if res:
+                    results.append(res)
+                    st.toast(f"🚨 Signal Found: {res['Stock']} ({res['Signal']})")
 
-    status_text.text("Scan Complete!")
-    progress_bar.progress(100)
+        status_text.text("Scan Completed Successfully!")
+        progress_bar.progress(100)
 
-    # --- DISPLAY RESULTS ---
-    if results:
-        st.canvas = st.container()
-        st.balloons()
-        st.success(f"AI Found {len(results)} Trades!")
-        
-        res_df = pd.DataFrame(results)
-        
-        def highlight_signal(val):
-            color = 'green' if val == 'BUY' else 'red'
-            return f'color: {color}; font-weight: bold'
-
-        st.dataframe(
-            res_df.style.map(highlight_signal, subset=['Signal']),
-            use_container_width=True
-        )
-        
-        st.markdown("---")
-        # Grid Layout for Cards
-        cols = st.columns(3)
-        for idx, trade in enumerate(results):
-            with cols[idx % 3]:
-                with st.container(border=True):
-                    st.subheader(f"{trade['Stock']}")
-                    
-                    # Color Logic
-                    color = "green" if trade['Signal'] == "BUY" else "red"
-                    
-                    st.markdown(f":{color}[**{trade['Signal']}**] @ ₹{trade['Price']}")
-                    st.metric("Target", f"₹{trade['Target']}", delta=f"Risk: ₹{trade['Risk_Per_Share']}", delta_color="inverse")
-                    st.text(f"🛑 SL: ₹{trade['Stop_Loss']}")
-                    
-                    st.info(f"Logic: {trade['Reason']}")
-                    st.caption(f"Momentum: {trade['Build_Up']}")
+        if results:
+            st.balloons()
+            st.success(f"🎯 AI Filtered {len(results)} High-Probability Setups!")
             
+            # Summary Table View
+            res_df = pd.DataFrame(results)
+            def highlight_signal(val):
+                color = '#3fb950' if val == 'BUY' else '#f85149'
+                return f'color: {color}; font-weight: bold'
+
+            st.dataframe(
+                res_df.style.map(highlight_signal, subset=['Signal']),
+                use_container_width=True
+            )
+            
+            st.markdown("---")
+            st.subheader("🛡️ Detailed Trade Setups")
+            
+            cols = st.columns(3)
+            for idx, trade in enumerate(results):
+                with cols[idx % 3]:
+                    with st.container(border=True):
+                        sig_class = "signal-buy" if trade['Signal'] == "BUY" else "signal-sell"
+                        st.markdown(f"### {trade['Stock']}")
+                        st.markdown(f"<span class='{sig_class}'>{trade['Signal']}</span> @ **₹{trade['Price']}**", unsafe_allow_html=True)
+                        st.metric("Target", f"₹{trade['Target']}", delta=f"Risk: ₹{trade['Risk_Per_Share']}", delta_color="inverse")
+                        st.markdown(f"🛑 **Stop Loss:** ₹{trade['Stop_Loss']}")
+                        st.info(f"💡 **Logic:** {trade['Reason']}")
+                        st.caption(f"⚡ **Status:** {trade['Build_Up']}")
+        else:
+            st.warning("No high-probability setups found right now. Market might be consolidating or sideways.")
+            st.caption("Tip: Try scanning during high volatility hours (9:30 AM - 11:00 AM or 1:30 PM - 2:30 PM).")
     else:
-        st.warning("Market is sideways/choppy. No high-probability setups found.")
-        st.caption("Try scanning again in 15 minutes.")
+        st.info("👈 Click **'Scan Market Now'** on the sidebar to trigger the AI anti-fake breakout scanner.")
+
+with tab2:
+    st.subheader("📌 System & Risk Management Rules")
+    st.markdown("""
+    - **No Repainting:** Signals are generated strictly on closed candles (`iloc[-2]`) to prevent false triggers.
+    - **Anti-Fake Breakout:** Body-to-wick ratio and volume spike filters are actively blocking retail traps.
+    - **Risk-Reward Ratio:** Fixed 1:2 risk-to-reward ratio managed via Average True Range (ATR).
+    """)
+    st.subheader("📈 Tracked Instruments")
+    st.write(list(token_map.keys()))
