@@ -1,4 +1,4 @@
-# dashboard.py (Pro Trading Terminal Edition)
+# dashboard.py (Clean Ultra-Minimalist Terminal)
 import streamlit as st
 import pandas as pd
 import concurrent.futures
@@ -7,7 +7,7 @@ from smart_logic import SmartAnalyzer
 from token_manager import get_high_volume_stocks
 
 # --- PAGE CONFIG & PRO CSS STYLING ---
-st.set_page_config(page_title="Jics Pro Terminal", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Jics Terminal", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
@@ -37,135 +37,116 @@ except Exception as e:
 analyzer = SmartAnalyzer()
 token_map = load_tokens()
 
-# --- TOP HEADER BAR WITH CONTROLS ---
+# --- TOP CONTROL BAR (No Title, Only Clean Controls) ---
 col_head1, col_head2, col_head3 = st.columns([3, 2, 2])
 with col_head1:
-    st.markdown("### ⚡ Jics Pro Terminal")
-    st.caption(f"Tracking: **{len(token_map)}** Liquid Stocks")
+    st.caption(f"Tracking: **{len(token_map)}** Liquid Stocks | API: **Connected ✅**")
 
 with col_head2:
-    max_threads = st.slider("Scan Speed (Workers)", 5, 20, 10, label_visibility="collapsed")
+    max_threads = st.slider("Scan Speed", 5, 20, 10, label_visibility="collapsed")
 
 with col_head3:
     start_scan = st.button('🔍 Scan Market Now', type="primary", use_container_width=True)
 
 st.markdown("---")
 
-# --- MAIN INTERFACE ---
-tab1, tab2 = st.tabs(["🚨 Live Trade Signals", "📊 Market Health & Info"])
+# --- MAIN EXECUTION ON SCAN ---
+if start_scan:
+    results = []
+    stock_list = list(token_map.items())
+    total_stocks = len(stock_list)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
 
-with tab1:
-    if start_scan:
-        results = []
-        stock_list = list(token_map.items())
-        total_stocks = len(stock_list)
+    def scan_single_stock(item):
+        name, token = item
+        try:
+            df = loader.fetch_candle_data(token, name, interval="FIVE_MINUTE")
+            if not df.empty:
+                trade_setup = analyzer.analyze_stock(df, name)
+                if trade_setup:
+                    return trade_setup
+        except Exception:
+            pass
+        return None
+
+    completed_count = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+        future_to_stock = {executor.submit(scan_single_stock, stock): stock for stock in stock_list}
         
-        st.write("### 🔄 Scanning Live Order Book & Price Action...")
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        def scan_single_stock(item):
-            name, token = item
-            try:
-                df = loader.fetch_candle_data(token, name, interval="FIVE_MINUTE")
-                if not df.empty:
-                    trade_setup = analyzer.analyze_stock(df, name)
-                    if trade_setup:
-                        return trade_setup
-            except Exception:
-                pass
-            return None
-
-        completed_count = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-            future_to_stock = {executor.submit(scan_single_stock, stock): stock for stock in stock_list}
+        for future in concurrent.futures.as_completed(future_to_stock):
+            completed_count += 1
+            progress_bar.progress(completed_count / total_stocks)
+            status_text.text(f"Scanning... {completed_count}/{total_stocks}")
             
-            for future in concurrent.futures.as_completed(future_to_stock):
-                completed_count += 1
-                progress_bar.progress(completed_count / total_stocks)
-                status_text.text(f"Progress: {completed_count}/{total_stocks} stocks analyzed...")
-                
-                res = future.result()
-                if res:
-                    results.append(res)
-                    st.toast(f"🚨 Signal Found: {res['Stock']} ({res['Signal']})")
+            res = future.result()
+            if res:
+                results.append(res)
+                st.toast(f"🚨 Signal Found: {res['Stock']} ({res['Signal']})")
 
-        status_text.text("Scan Completed Successfully!")
-        progress_bar.progress(100)
+    status_text.empty()
+    progress_bar.empty()
 
-        if results:
-            st.success(f"🎯 Filtered {len(results)} High-Probability Setups!")
-            
-            res_df = pd.DataFrame(results)
+    if results:
+        res_df = pd.DataFrame(results)
 
-            # --- REORDER COLUMNS AS REQUESTED ---
-            # Desired order: Stock, Signal, Price, Target, Stop_Loss, Risk_Per_Share, Build_Up, Reason
-            cols_order = ['Stock', 'Signal', 'Price', 'Target', 'Stop_Loss', 'Risk_Per_Share', 'Build_Up', 'Reason']
-            # Ensure all columns exist before reordering
-            cols_order = [c for c in cols_order if c in res_df.columns]
-            res_df = res_df[cols_order]
+        # --- REORDER COLUMNS (Build_Up before Reason) ---
+        cols_order = ['Stock', 'Signal', 'Price', 'Target', 'Stop_Loss', 'Risk_Per_Share', 'Build_Up', 'Reason']
+        cols_order = [c for c in cols_order if c in res_df.columns]
+        res_df = res_df[cols_order]
 
-            # --- TOP SUMMARY METRICS ---
-            total_sigs = len(res_df)
-            buy_cnt = len(res_df[res_df['Signal'] == 'BUY'])
-            sell_cnt = len(res_df[res_df['Signal'] == 'SELL'])
+        # --- TOP SUMMARY METRICS ---
+        total_sigs = len(res_df)
+        buy_cnt = len(res_df[res_df['Signal'] == 'BUY'])
+        sell_cnt = len(res_df[res_df['Signal'] == 'SELL'])
 
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Signals", total_sigs)
-            m2.metric("BUY Setups 🟢", buy_cnt)
-            m3.metric("SELL Setups 🔴", sell_cnt)
-            st.markdown("---")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Signals", total_sigs)
+        m2.metric("BUY Setups 🟢", buy_cnt)
+        m3.metric("SELL Setups 🔴", sell_cnt)
+        st.markdown("---")
 
-            # --- COLOR HIGHLIGHTING FOR TABLE ---
-            def highlight_flows(val):
-                if val in ['BUY', 'Long Build Up 🟢', 'Short Covering ⚡']:
-                    return 'color: #3fb950; font-weight: bold; background-color: rgba(63, 185, 80, 0.15);'
-                elif val in ['SELL', 'Short Build Up 🔴', 'Long Unwinding ⚠️']:
-                    return 'color: #f85149; font-weight: bold; background-color: rgba(248, 81, 73, 0.15);'
-                return ''
+        # --- COLOR HIGHLIGHTING FOR TABLE ---
+        def highlight_flows(val):
+            if val in ['BUY', 'Long Build Up 🟢', 'Short Covering ⚡']:
+                return 'color: #3fb950; font-weight: bold; background-color: rgba(63, 185, 80, 0.15);'
+            elif val in ['SELL', 'Short Build Up 🔴', 'Long Unwinding ⚠️']:
+                return 'color: #f85149; font-weight: bold; background-color: rgba(248, 81, 73, 0.15);'
+            return ''
 
-            # --- CLEAN SUMMARY TABLE VIEW WITH PROPER COLUMN CONFIG ---
-            st.dataframe(
-                res_df.style.map(highlight_flows, subset=['Signal', 'Build_Up']),
-                hide_index=True,
-                use_container_width=True,
-                column_config={
-                    "Stock": "Stock Name",
-                    "Signal": "Signal Type",
-                    "Price": st.column_config.NumberColumn("Price (₹)", format="₹%.2f"),
-                    "Target": st.column_config.NumberColumn("Target (₹)", format="₹%.2f"),
-                    "Stop_Loss": st.column_config.NumberColumn("Stop Loss (₹)", format="₹%.2f"),
-                    "Risk_Per_Share": st.column_config.NumberColumn("Risk/Share (₹)", format="₹%.2f"),
-                    "Build_Up": "Flow Status",
-                    "Reason": "Trigger Reason"
-                }
-            )
-            
-            st.markdown("---")
-            st.subheader("🛡️ Detailed Trade Cards")
-            
-            cols = st.columns(3)
-            for idx, trade in enumerate(results):
-                with cols[idx % 3]:
-                    with st.container(border=True):
-                        sig_class = "signal-buy" if trade['Signal'] == "BUY" else "signal-sell"
-                        st.markdown(f"### {trade['Stock']}")
-                        st.markdown(f"<span class='{sig_class}'>{trade['Signal']}</span> @ **₹{trade['Price']:.2f}**", unsafe_allow_html=True)
-                        st.metric("Target", f"₹{trade['Target']:.2f}", delta=f"Risk: ₹{trade['Risk_Per_Share']:.2f}", delta_color="inverse")
-                        st.markdown(f"🛑 **Stop Loss:** ₹{trade['Stop_Loss']:.2f}")
-                        st.caption(f"⚡ **Status:** {trade['Build_Up']}")
-                        st.info(f"💡 **Logic:** {trade['Reason']}")
-        else:
-            st.warning("No high-probability setups found right now. Market might be consolidating or sideways.")
+        # --- SUMMARY TABLE VIEW ---
+        st.dataframe(
+            res_df.style.map(highlight_flows, subset=['Signal', 'Build_Up']),
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Stock": "Stock Name",
+                "Signal": "Signal Type",
+                "Price": st.column_config.NumberColumn("Price (₹)", format="₹%.2f"),
+                "Target": st.column_config.NumberColumn("Target (₹)", format="₹%.2f"),
+                "Stop_Loss": st.column_config.NumberColumn("Stop Loss (₹)", format="₹%.2f"),
+                "Risk_Per_Share": st.column_config.NumberColumn("Risk/Share (₹)", format="₹%.2f"),
+                "Build_Up": "Flow Status",
+                "Reason": "Trigger Reason"
+            }
+        )
+        
+        st.markdown("---")
+        
+        # --- DETAILED TRADE CARDS ---
+        cols = st.columns(3)
+        for idx, trade in enumerate(results):
+            with cols[idx % 3]:
+                with st.container(border=True):
+                    sig_class = "signal-buy" if trade['Signal'] == "BUY" else "signal-sell"
+                    st.markdown(f"### {trade['Stock']}")
+                    st.markdown(f"<span class='{sig_class}'>{trade['Signal']}</span> @ **₹{trade['Price']:.2f}**", unsafe_allow_html=True)
+                    st.metric("Target", f"₹{trade['Target']:.2f}", delta=f"Risk: ₹{trade['Risk_Per_Share']:.2f}", delta_color="inverse")
+                    st.markdown(f"🛑 **Stop Loss:** ₹{trade['Stop_Loss']:.2f}")
+                    st.caption(f"⚡ **Status:** {trade['Build_Up']}")
+                    st.info(f"💡 **Logic:** {trade['Reason']}")
     else:
-        st.info("👆 Click **'Scan Market Now'** at the top right corner to trigger the live price action scanner.")
-
-with tab2:
-    st.subheader("📌 System & Risk Management Rules")
-    st.markdown("""
-    - **No Repainting:** Signals are generated strictly on closed candles (`iloc[-2]`) to prevent false triggers.
-    - **Volume & Flow Analysis:** Real-time tracking of Long Build Up, Short Covering, Short Build Up, and Long Unwinding flows.
-    - **Risk-Reward Ratio:** Fixed 1:2 risk-to-reward ratio managed via Average True Range (ATR).
-    """)
-    st.subheader("📈 Tracked Instruments")
-    st.write(list(token_map.keys()))
+        st.warning("No high-probability setups found right now.")
+else:
+    st.info("👆 Click **'Scan Market Now'** above to start scanning.")
