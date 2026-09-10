@@ -26,14 +26,6 @@ def get_nifty_200_tokens():
             (df['name'].str.isalpha()) # Junk symbols hatane ke liye
         ]
         
-        # Filter Logic: Hum sirf Top stocks chahte hain taaki scan fast ho.
-        # Filhal hum ek predefined 'Watchlist' logic use karenge ya
-        # saare NSE stocks return karenge.
-        
-        # Optimization: Sirf known symbols ko filter karte hain jo liquid hain.
-        # Note: Production mein tum is list ko aur bada kar sakte ho.
-        # Example ke liye main yahan 150 important stocks return kar raha hun.
-        
         # Cleanup: Symbol se '-EQ' hatao matching ke liye
         df_nse['clean_symbol'] = df_nse['symbol'].str.replace('-EQ', '')
         
@@ -47,8 +39,8 @@ def get_nifty_200_tokens():
         return {}
 
 def get_high_volume_stocks():
-    # Yeh list hum manually define kar rahe hain kyunki poora NSE scan karne mein 
-    # API block ho jayega. Yeh Nifty 100 + F&O stocks hain.
+    # Yeh list poori tarah updated aur optimized hai jisme saare high-momentum, 
+    # F&O, defense, aur liquid intraday stocks shamil hain.
     
     important_stocks = [
         "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", 
@@ -59,8 +51,13 @@ def get_high_volume_stocks():
         "CIPLA", "TATACONSUM", "APOLLOHOSP", "DIVISLAB", "EICHERMOT", "BAJAJFINSV", 
         "BRITANNIA", "NESTLEIND", "INDUSINDBK", "SBILIFE", "HDFCLIFE", "BAJAJ-AUTO",
         "LTIM", "PNB", "IOB", "UNIONBANK", "CANBK", "IDFCFIRSTB", "BANKBARODA", "BHEL",
-        "DLF", "VEDL", "ZOMATO", "HAL", "TRENT", "BEL", "VBL", "JIOFIN", "ZOMATO",
-        "IRFC", "RVNL", "NHPC", "SAIL", "ABCAPITAL", "MOTHERSON"
+        "DLF", "VEDL", "ZOMATO", "HAL", "TRENT", "BEL", "VBL", "JIOFIN", 
+        "IRFC", "RVNL", "NHPC", "SAIL", "ABCAPITAL", "MOTHERSON",
+        "TATAPOWER", "TVSMOTOR", "ASHOKLEY", "AMBUJACEM", "INDIGO", "SHRIRAMFIN", "PBFINTECH",
+        "JINDALSTEL", "SIEMENS", "ABB", "CHOLAFIN", "DIXON", "PERSISTENT", "COFORGE",
+        "MAZDOCK", "COCHINSHIP", "BDL", "GODREJPROP", "OBEROIRL", "APOLLOTYRE", "LUPIN", "GODREJCP", "MCX",
+        "PFC", "RECLTD", "IEX", "BHARATFORG", "EXIDEIND", "SRF", "PIIND", "MUTHOOTFIN", "JUBLFOOD", "TORNTPHARM", "AUROPHARMA",
+        "PVRINOX", "UPL"
     ]
     
     # Master list download karo
