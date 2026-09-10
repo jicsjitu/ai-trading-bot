@@ -1,4 +1,4 @@
-# dashboard.py (Clean Pro Terminal)
+# dashboard.py (Clean Pro Terminal with Session State)
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -8,7 +8,7 @@ from smart_logic import SmartAnalyzer
 from token_manager import get_high_volume_stocks
 
 # --- PAGE CONFIG & PRO CSS STYLING ---
-st.set_page_config(page_title="Pro Terminal", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Jitu Kumar Gupta", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
@@ -18,6 +18,10 @@ st.markdown("""
         .signal-sell { color: #f85149; font-weight: bold; font-size: 1.2rem; }
     </style>
 """, unsafe_allow_html=True)
+
+# --- SESSION STATE INITIALIZATION ---
+if 'res_df' not in st.session_state:
+    st.session_state.res_df = None
 
 # --- CACHING LOGIC ---
 @st.cache_resource
@@ -38,7 +42,7 @@ except Exception as e:
 analyzer = SmartAnalyzer()
 token_map = load_tokens()
 
-# --- TOP CONTROL BAR (Only Scan Button and Speed Slider, No Title) ---
+# --- TOP CONTROL BAR ---
 col_head1, col_head2 = st.columns([2, 3])
 
 with col_head1:
@@ -89,11 +93,16 @@ if start_scan:
 
     if results:
         res_df = pd.DataFrame(results)
-
-        # Reorder columns
         cols_order = ['Stock', 'Signal', 'Price', 'Target', 'Stop_Loss', 'Risk_Per_Share', 'Build_Up', 'Reason']
         cols_order = [c for c in cols_order if c in res_df.columns]
-        res_df = res_df[cols_order]
+        st.session_state.res_df = res_df[cols_order]
+    else:
+        st.session_state.res_df = pd.DataFrame()
+
+# --- DISPLAY RESULTS IF AVAILABLE IN SESSION STATE ---
+if st.session_state.res_df is not None:
+    if not st.session_state.res_df.empty:
+        res_df = st.session_state.res_df
 
         # --- TOP SUMMARY METRICS & EXPORT / FILTER CONTROLS ---
         total_sigs = len(res_df)
@@ -171,4 +180,6 @@ if start_scan:
                         st.caption(f"⚡ **Status:** {trade['Build_Up']}")
                         st.info(f"💡 **Logic:** {trade['Reason']}")
         else:
-            st.warning("No setups match the selected filter.")
+            st.info("No setups match the selected filter.")
+    else:
+        st.warning("No high-probability setups found right now.")
