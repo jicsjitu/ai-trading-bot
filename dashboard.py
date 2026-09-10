@@ -1,4 +1,4 @@
-# dashboard.py (Jitu Kumar Gupta - Pro Terminal)
+# dashboard.py (Clean Pro Terminal)
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -8,7 +8,7 @@ from smart_logic import SmartAnalyzer
 from token_manager import get_high_volume_stocks
 
 # --- PAGE CONFIG & PRO CSS STYLING ---
-st.set_page_config(page_title="Jitu Kumar Gupta - Terminal", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Pro Terminal", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
@@ -38,17 +38,14 @@ except Exception as e:
 analyzer = SmartAnalyzer()
 token_map = load_tokens()
 
-# --- TOP CONTROL BAR (Scan Button on Left, Name on Right) ---
-col_head1, col_head2, col_head3 = st.columns([2, 2, 3])
+# --- TOP CONTROL BAR (Only Scan Button and Speed Slider, No Title) ---
+col_head1, col_head2 = st.columns([2, 3])
 
 with col_head1:
-    start_scan = st.button('🔍 Scan Market Now', type="primary", use_container_width=True)
+    start_scan = st.button('🔍 Jitu Kumar Gupta', type="primary", use_container_width=True)
 
 with col_head2:
     max_threads = st.slider("Scan Speed", 5, 20, 10, label_visibility="collapsed")
-
-with col_head3:
-    st.markdown("### ⚡ Jitu Kumar Gupta")
 
 st.markdown("---")
 
